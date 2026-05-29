@@ -98,8 +98,8 @@ def generate_cnip_cidrs():
             lastFullCidr = currentCidr
             continue
         prefix = longest_common_prefix(lastFullCidr, currentCidr)
-        # 只有当前缀足够长时才压缩（至少80%相同）
-        if len(prefix) < len(lastFullCidr) * 0.8:
+        # 只有当前缀足够长时才压缩（至少50%相同）
+        if len(prefix) < len(lastFullCidr) * 0.5:
             lastFullCidr = currentCidr
             continue
         # 使用~前缀表示压缩的部分
