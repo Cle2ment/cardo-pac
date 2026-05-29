@@ -3,14 +3,30 @@ var proxy = __PROXY__;
 var direct = 'DIRECT';
 
 var directDomains = __DIRECT_DOMAINS__;
+var directDomainHash = {};
 
 var domainsUsingProxy = __DOMAINS__;
+var proxyDomainHash = {};
+
+// Foreign TLDs overwhelmingly non-Chinese — skip DNS for these
+var foreignTLDs = {'.com':1,'.org':1,'.net':1,'.io':1,'.dev':1,'.app':1,'.co':1,'.ai':1,'.tv':1,'.me':1,'.info':1,'.biz':1};
 
 var localTlds = __LOCAL_TLDS__;
 
 var cidrs = __CIDRS__;
 
+var hop = Object.prototype.hasOwnProperty;
+
 function isIpAddress(ip) {
+    // Quick reject: first char outside IP range (domain names start with letter, dash, or digit 0)
+    // IP addresses start with: digit(1-9) for IPv4, '[' for IPv6 literal, digit/letter for raw IPv6
+    var c = ip.charCodeAt(0);
+    if (c < 48 || c > 57) {
+        // Maybe IPv6 — allow bracket '[' (91), hex A-F (65-70), a-f (97-102)
+        var isUpperHex = (c >= 65 && c <= 70);
+        var isLowerHex = (c >= 97 && c <= 102);
+        if (c !== 91 && !isUpperHex && !isLowerHex) return false;
+    }
     return /^\d{1,3}(\.\d{1,3}){3}$/.test(ip) || /^([0-9a-fA-F]{0,4}:){1,7}[0-9a-fA-F]{0,4}$/.test(ip);
 }
 
@@ -45,13 +61,8 @@ RadixTree.prototype.search = function(string) {
 }
 
 function ipToBinary(ip) {
-    var bin = ''
-    // Check if it's IPv4
-    if (/^\d{1,3}(\.\d{1,3}){3}$/.test(ip)) {
-        bin = ip.split('.').map(function(num) {
-            return ("00000000" + parseInt(num, 10).toString(2)).slice(-8);
-        }).join('');
-    } else if (/^([0-9a-fA-F]{0,4}:){1,7}[0-9a-fA-F]{0,4}$/.test(ip)) {
+    // IPv6 check first (IPv4 never contains ':')
+    if (ip.indexOf(':') !== -1) {
         // Expand the IPv6 address if it contains '::'
         var parts = ip.split('::');
         var left = parts[0] ? parts[0].split(':') : [];
@@ -64,30 +75,32 @@ function ipToBinary(ip) {
         var fullAddress = left.concat(Array(zeroGroups + 1).join('0').split('')).concat(right);
         
         // Convert each group to binary and pad to 16 bits
-        bin = fullAddress.map(function(group) {
+        return fullAddress.map(function(group) {
             return ("0000000000000000" + parseInt(group || '0', 16).toString(2)).slice(-16);
         }).join('');
     }
-    // 不要删除前导零！保持完整的二进制字符串以便与CIDR前缀匹配
-    return bin;
+    // IPv4
+    return ip.split('.').map(function(num) {
+        return ("00000000" + parseInt(num, 10).toString(2)).slice(-8);
+    }).join('');
 }
   
 function isInDirectDomain(host) {
-    for (var i = 0; i < directDomains.length; i++) {
-        var domain = directDomains[i];
-        if (host === domain || host.endsWith('.' + domain)) {
-            return true;
-        }
+    // O(1) exact match — hasOwnProperty guard for prototype safety
+    if (hop.call(directDomainHash, host)) return true;
+    // O(k) suffix match (k = number of dots in hostname, typically < 5)
+    for (var idx = host.indexOf('.'); idx !== -1; idx = host.indexOf('.', idx + 1)) {
+        if (hop.call(directDomainHash, host.substring(idx + 1))) return true;
     }
     return false;
 }
 
 function isInProxyDomain(host) {
-    for (var i = 0; i < domainsUsingProxy.length; i++) {
-        var domain = domainsUsingProxy[i];
-        if (host === domain || host.endsWith('.' + domain)) {
-            return true;
-        }
+    // O(1) exact match — hasOwnProperty guard for prototype safety
+    if (hop.call(proxyDomainHash, host)) return true;
+    // O(k) suffix match
+    for (var idx = host.indexOf('.'); idx !== -1; idx = host.indexOf('.', idx + 1)) {
+        if (hop.call(proxyDomainHash, host.substring(idx + 1))) return true;
     }
     return false;
 }
@@ -117,55 +130,68 @@ function isPrivateIp(ip) {
 }
 
 function FindProxyForURL(url, host) {
-    if (isInDirectDomain(host)) {
-        debug('命中直连域名', host, 'N/A');
-        return direct;
-    } else if (isInProxyDomain(host)) {
-        debug('命中代理域名', host, 'N/A');
+    // FAST PATH 1: IP address host — skip domain matching, go straight to CIDR
+    if (isIpAddress(host)) {
+        if (isPrivateIp(host)) {
+            return direct;
+        }
+        if (radixTree.search(ipToBinary(host))) {
+            return direct;
+        }
         return proxy;
-    } else if (isPlainHostName(host) || host === 'localhost' || isLocalTestDomain(host)) {
-        debug('命中本地主机名或本地tld', host, 'N/A');
-        return direct;
-    } else if (isPrivateIp(host)) {
-        debug('命中私有 IP 地址', host, 'N/A');
+    }
+
+    // FAST PATH 2: Plain hostname or local domain — no DNS needed
+    if (isPlainHostName(host) || host === 'localhost' || isLocalTestDomain(host)) {
         return direct;
     }
 
-    ip = isIpAddress(host) ? host : dnsResolve(host);
+    // FAST PATH 3: Hash-based domain lookup — O(1) exact + O(k) suffix
+    if (isInDirectDomain(host)) {
+        return direct;
+    }
+    if (isInProxyDomain(host)) {
+        return proxy;
+    }
+
+    // DNS PATH: TLD heuristic — skip DNS for overwhelmingly foreign TLDs
+    // (.com, .org, .net, .io, .dev, .app... are 99%+ non-Chinese)
+    var tld = host.substring(host.lastIndexOf('.'));
+    if (foreignTLDs[tld]) {
+        return proxy;
+    }
+
+    // Chinese or unknown TLD — DNS resolve + CIDR matching
+    var ip = dnsResolve(host);
 
     if (!ip) {
-        debug('无法解析 IP 地址', host, 'N/A');
         return proxy;
-    } else if (isPrivateIp(ip)) {
-        debug('域名解析后命中私有 IP 地址', host, ip);
+    }
+    if (isPrivateIp(ip)) {
         return direct;
-    } else if (radixTree.search(ipToBinary(ip))) {
-        debug('匹配到直连IP', host, ip);
+    }
+    if (radixTree.search(ipToBinary(ip))) {
         return direct;
     }
 
-    debug('未命中任何规则', host, ip);
     return proxy;
-}
-
-var allowAlert = true
-function debug(msg, host='', ip='') {
-    if (!allowAlert) {
-        return
-    }
-    try {
-        alert('[' + host + ' -> ' + ip + '] ' + msg);
-    } catch (e) {
-        allowAlert = false
-    }
 }
 
 var radixTree = new RadixTree();
 
 (function () {
-    debug('开始生成 Radix Tree', 'PAC文件载入开始');
+    // Build domain hashes for O(1) lookup
+    var i;
+    for (i = 0; i < directDomains.length; i++) {
+        directDomainHash[directDomains[i]] = true;
+    }
+    for (i = 0; i < domainsUsingProxy.length; i++) {
+        proxyDomainHash[domainsUsingProxy[i]] = true;
+    }
+
+    // Build CIDR Radix Tree
     var lastFullPrefix = '';
-    for (var i = 0; i < cidrs.length; i++) {
+    for (i = 0; i < cidrs.length; i++) {
         var prefix = cidrs[i];
         // 解压缩：如果以~开头，则从lastFullPrefix中还原
         if (prefix.substring(0, 1) !== '~') {
@@ -179,5 +205,4 @@ var radixTree = new RadixTree();
         // 直接使用二进制字符串插入（无需转换）
         radixTree.insert(prefix);
     }
-    debug('Radix Tree 已生成', 'PAC文件载入完毕', cidrs.length.toString() + '个CIDR条目');
 })();
