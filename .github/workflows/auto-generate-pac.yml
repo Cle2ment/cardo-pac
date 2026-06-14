@@ -35,7 +35,7 @@ jobs:
 
       - name: Run cardo.py script
         if: env.file-exists == 'false'
-        run: ./cardo.py -f cardo.pac -p "PROXY 127.0.0.1:%mixed-port%; SOCKS5 127.0.0.1:%mixed-port%; DIRECT;" --proxy-domains=proxy-domains.txt --direct-domains=direct-domains.txt --localtld-domains=local-tlds.txt --ip-file=cidrs-cn.txt
+        run: ./cardo.py -f cardo.pac -p "SOCKS5 127.0.0.1:%mixed-port%; PROXY 127.0.0.1:%mixed-port%; DIRECT;" --proxy-domains=proxy-domains.txt --direct-domains=direct-domains.txt --localtld-domains=local-tlds.txt --ip-file=cidrs-cn.txt
 
       - name: Commit and push changes
         if: env.file-exists == 'false'
