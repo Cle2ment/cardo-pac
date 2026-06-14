@@ -1,11 +1,11 @@
-# Auto PAC (from gfw-pac)
+# Auto PAC
 
 科学上网 PAC 文件以及生成器。通过自定义域名和 CNIP 地址生成 PAC(Proxy auto-config) 文件。对存在于自定义域名和解析出的IP不是CNIP的域名使用代理，支持IPv6。
 
-**此仓库每周四自动通过 GitHub Action 从 `Loyalsoldier/geoip` 同步数据并更新 `gfw.pac` 文件**
+**此仓库每周四自动通过 GitHub Action 从 `Loyalsoldier/geoip` 同步数据并更新 `cardo.pac` 文件**
 
 ## 特性
-* 开箱即用，直接可用的 `gfw.pac` 包含了常用的直连域名和代理域名以及国内IPv4/IPv6地址段
+* 开箱即用，直接可用的 `cardo.pac` 包含了常用的直连域名和代理域名以及国内IPv4/IPv6地址段
 * IP规则前置：若域名解析出的 IP 地址属于国内，返回直连，流量不经过代理程序
 * 速度快：优先按域名匹配，高频访问域名节省解析时间。IP段匹配使用Radix Tree，时间复杂度仅为O(m) _m<=32(IPv4) 或者 m<=128(IPv6)_
 * 不误伤：仅添加非常少的高频域名，减少流量走向错误的概率。
@@ -18,12 +18,12 @@
 
 ## 用法
 
-1. （**推荐**）下载并编辑 `gfw.pac` 的第一行换成自己的代理服务器直接使用。
-2. 按下面说明手工运行 `gfw-pac.py` 生成自己的 pac 文件。此种方法可自定义域名流向，更灵活。但现在大多数客户端都可以定义域名匹配规则，特殊域名通过客户端定制即可。
+1. （**推荐**）下载并编辑 `cardo.pac` 的第一行换成自己的代理服务器直接使用。
+2. 按下面说明手工运行 `cardo.py` 生成自己的 pac 文件。此种方法可自定义域名流向，更灵活。但现在大多数客户端都可以定义域名匹配规则，特殊域名通过客户端定制即可。
 
-## gfw-pac.py 使用说明
+## cardo.py 使用说明
 
-    usage: gfw-pac.py -f 输出的PAC文件名 -p 代理服务器 [-h]
+    usage: cardo.py -f 输出的PAC文件名 -p 代理服务器 [-h]
                       [--proxy-domains 自定义使用代理域名的文件]
                       [--direct-domains 自定义直连域名域名的文件]
                       [--localtld-domains 本地TLD文件]
@@ -41,7 +41,7 @@
 
 举例：
 
-    ./gfw-pac.py -f gfw.pac \
+    ./cardo.py -f cardo.pac \
                  -p "PROXY 192.168.1.200:3128; DIRECT" \
                  --proxy-domains=proxy-domains.txt \
                  --direct-domains=direct-domains.txt \

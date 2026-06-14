@@ -2,7 +2,7 @@
 
 /**
  * PAC 文件执行测试脚本
- * 用于验证 gfw.pac 文件是否能正确执行和返回代理配置
+ * 用于验证 cardo.pac 文件是否能正确执行和返回代理配置
  */
 
 const fs = require('fs');
@@ -10,7 +10,7 @@ const path = require('path');
 const vm = require('vm');
 
 // 读取 PAC 文件
-const pacFilePath = path.join(__dirname, 'gfw.pac');
+const pacFilePath = path.join(__dirname, 'cardo.pac');
 const pacContent = fs.readFileSync(pacFilePath, 'utf8');
 
 // Mock 浏览器提供的 PAC 函数

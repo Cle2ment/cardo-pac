@@ -3,7 +3,7 @@ name: Auto Generate Release
 on:
   push:
     paths:
-      - 'gfw.pac'
+      - 'cardo.pac'
   workflow_dispatch:
 
 jobs:
@@ -25,7 +25,7 @@ jobs:
         id: commit_count
         run: |
           today=$(TZ=Asia/Shanghai date +%Y%m%d)
-          commit_count=$(TZ=Asia/Shanghai git log --date=local --since="$today 00:00:00" --until="$today 23:59:59" --pretty=format: --name-only | grep -c '^gfw.pac$')
+          commit_count=$(TZ=Asia/Shanghai git log --date=local --since="$today 00:00:00" --until="$today 23:59:59" --pretty=format: --name-only | grep -c '^cardo.pac$')
           echo "COMMIT_COUNT=$commit_count" >> $GITHUB_ENV
           echo "RELEASE_NAME=v$(TZ='Asia/Shanghai' date +%Y%m%d).$commit_count" >> $GITHUB_ENV
           # Use multi-line env syntax to handle commit messages with newlines
@@ -50,4 +50,4 @@ jobs:
           body: "${{ env.COMMIT_MESSAGE }}"
           draft: false
           prerelease: false
-          files: gfw.pac
+          files: cardo.pac
