@@ -9,7 +9,7 @@ var domainsUsingProxy = __DOMAINS__;
 var proxyDomainHash = {};
 
 // Foreign TLDs overwhelmingly non-Chinese — skip DNS for these
-var foreignTLDs = {'.com':1,'.org':1,'.net':1,'.io':1,'.dev':1,'.app':1,'.co':1,'.ai':1,'.tv':1,'.me':1,'.info':1,'.biz':1,'.edu':1,'.gov':1,'.uk':1,'.de':1,'.jp':1,'.kr':1,'.fr':1,'.ru':1};
+var foreignTLDs = {'.com':1,'.org':1,'.net':1,'.io':1,'.dev':1,'.app':1,'.co':1,'.ai':1,'.tv':1,'.me':1,'.info':1,'.biz':1,'.edu':1,'.gov':1,'.uk':1,'.de':1,'.jp':1,'.kr':1,'.fr':1,'.ru':1,'.live':1,'.cloud':1,'.xyz':1,'.site':1,'.online':1,'.shop':1,'.club':1,'.work':1,'.store':1,'.link':1,'.tech':1,'.space':1,'.fun':1,'.blog':1,'.pro':1,'.website':1,'.life':1,'.world':1,'.ninja':1,'.wiki':1,'.run':1,'.gg':1,'.cat':1,'.one':1,'.page':1,'.guru':1,'.design':1,'.vc':1,'.studio':1,'.news':1,'.media':1,'.agency':1,'.email':1,'.digital':1,'.academy':1,'.finance':1,'.systems':1,'.software':1,'.solutions':1,'.network':1,'.exchange':1,'.host':1};
 
 var localTlds = __LOCAL_TLDS__;
 
@@ -18,15 +18,14 @@ var cidrs = __CIDRS__;
 var hop = Object.prototype.hasOwnProperty;
 
 function isIpAddress(ip) {
-    // Quick reject: first char outside IP range (domain names start with letter, dash, or digit 0)
-    // IP addresses start with: digit(1-9) for IPv4, '[' for IPv6 literal, digit/letter for raw IPv6
+    // Quick reject: first char outside IP range
+    // IP addresses start with: digit(0-9) for IPv4, '[' for IPv6 literal, hex for raw IPv6
+    // All lowercase letters (a-z) are domain names — PAC/lowercases hosts, so this covers 99%+ domains
     var c = ip.charCodeAt(0);
-    if (c < 48 || c > 57) {
-        // Maybe IPv6 — allow bracket '[' (91), hex A-F (65-70), a-f (97-102)
-        var isUpperHex = (c >= 65 && c <= 70);
-        var isLowerHex = (c >= 97 && c <= 102);
-        if (c !== 91 && !isUpperHex && !isLowerHex) return false;
-    }
+    if (c >= 97) return false;          // a-z → always a domain name, IPv6 hex segments are lowercase in URL hosts
+    if (c >= 71 && c <= 90) return false;  // G-Z uppercase → always a domain name
+    if (c >= 48 && c <= 57) {}          // 0-9 → could be IPv4
+    else if (c !== 91) return false;    // only '[' is allowed (IPv6 literal)
     return /^\d{1,3}(\.\d{1,3}){3}$/.test(ip) || /^([0-9a-fA-F]{0,4}:){1,7}[0-9a-fA-F]{0,4}$/.test(ip);
 }
 
@@ -73,7 +72,9 @@ function ipToBinary(ip) {
         var zeroGroups = 8 - (left.length + right.length);
         
         // Create the full address by inserting zero groups
-        var fullAddress = left.concat(Array(zeroGroups + 1).join('0').split('')).concat(right);
+        var fullAddress = left.slice();
+        for (var z = 0; z < zeroGroups; z++) fullAddress.push('0');
+        fullAddress = fullAddress.concat(right);
         
         // Convert each group to binary and pad to 16 bits
         return fullAddress.map(function(group) {
@@ -112,9 +113,10 @@ function isLocalTestDomain(domain) {
     if (tld === domain) {
         return false;
     }
-    return localTlds.some(function(localTld) {
-        return tld === localTld;
-    });
+    for (var i = 0; i < localTlds.length; i++) {
+        if (tld === localTlds[i]) return true;
+    }
+    return false;
 }
 
 // Known GFW DNS pollution IPs — dnsResolve may return these for blocked domains.
